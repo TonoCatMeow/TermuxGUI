@@ -5,7 +5,7 @@ const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
 let socket = null;
-let appState = { apps: [], workflows: [], tunnel: null };
+let appState = { apps: [], workflows: [] };
 
 /* ================= helpers ================= */
 
@@ -188,13 +188,14 @@ function renderApps(list) {
   appState.apps = list;
   const tbody = $('#apps-table tbody');
   if (!list.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="muted">no apps yet</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="muted">no apps yet</td></tr>';
     return;
   }
   tbody.innerHTML = list.map((a) => `
     <tr>
-      <td><strong>${esc(a.name)}</strong><br><span class="muted">${esc(a.method)} · ${esc(a.command)}</span></td>
+      <td><strong>${esc(a.name)}</strong><br><span class="muted">${esc(a.method)}${a.static ? ' · static site' : a.command ? ` · ${esc(a.command)}` : ''}</span></td>
       <td>${statusPill(a.status)}</td>
+      <td>${a.port ? `<a href="http://${location.hostname}:${a.port}" target="_blank" rel="noopener">:${a.port}</a>` : '–'}</td>
       <td>${a.status === 'running' ? fmtDuration(a.uptimeMs) : '–'}</td>
       <td>${a.restarts}</td>
       <td>
@@ -240,6 +241,15 @@ $('#app-method').addEventListener('change', (e) => {
   $$(`.method-${m}`).forEach((f) => f.classList.remove('hidden'));
 });
 
+// static-site toggle: no start command needed, port becomes required
+$('#app-static').addEventListener('change', (e) => {
+  const isStatic = e.target.checked;
+  $('#command-field').classList.toggle('hidden', isStatic);
+  const f = $('#new-app-form').elements;
+  f.command.required = !isStatic;
+  f.port.required = isStatic;
+});
+
 $('#new-app-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.target;
@@ -254,6 +264,8 @@ $('#new-app-form').addEventListener('submit', async (e) => {
       fd.append('name', f.name.value);
       fd.append('command', f.command.value);
       fd.append('cwd', f.cwd.value);
+      fd.append('port', f.port.value);
+      fd.append('isStatic', f.isStatic.checked ? 'true' : 'false');
       fd.append('autoStart', f.autoStart.checked ? 'true' : 'false');
       if (f.file.files[0]) fd.append('file', f.file.files[0]);
       result = await api('/api/apps/upload', { method: 'POST', body: fd });
@@ -268,6 +280,8 @@ $('#new-app-form').addEventListener('submit', async (e) => {
           content: f.content.value,
           command: f.command.value,
           cwd: f.cwd.value,
+          port: f.port.value,
+          isStatic: f.isStatic.checked,
           autoStart: f.autoStart.checked,
         }),
       });
@@ -367,45 +381,6 @@ $('#new-wf-form').addEventListener('submit', async (e) => {
     $('#new-wf-form').classList.add('hidden');
   } catch (err) {
     msg.textContent = err.message;
-  }
-});
-
-/* ================= tunnels ================= */
-
-function renderTunnel(t) {
-  appState.tunnel = t;
-  const state = $('#tunnel-state');
-  state.textContent = t.running ? 'running' : 'not running';
-  state.className = `pill ${t.running ? 'running' : 'stopped'}`;
-  $('#tunnel-since').textContent = t.running && t.since ? `since ${new Date(t.since).toLocaleTimeString()}` : '';
-  $('#tunnel-binary').textContent = t.binaryAvailable
-    ? 'found'
-    : 'NOT FOUND — install from Cloudflare apt repo (see README / Tunnels help)';
-  $('#tunnel-token-state').textContent = t.tokenSaved ? 'token saved ✓ (hidden)' : 'no token saved';
-  $('#tunnel-start').disabled = t.running || !t.tokenSaved || !t.binaryAvailable;
-  $('#tunnel-stop').disabled = !t.running;
-  $('#tunnel-log').textContent = t.recentLog.length ? t.recentLog.join('\n') : '–';
-  $('#tunnel-badge').classList.toggle('hidden', !t.running);
-}
-
-$('#tunnel-start').addEventListener('click', async () => {
-  try { await api('/api/tunnel/start', { method: 'POST', body: '{}' }); }
-  catch (err) { $('#tunnel-msg').textContent = err.message; }
-});
-
-$('#tunnel-stop').addEventListener('click', async () => {
-  try { await api('/api/tunnel/stop', { method: 'POST', body: '{}' }); }
-  catch (err) { $('#tunnel-msg').textContent = err.message; }
-});
-
-$('#tunnel-token-save').addEventListener('click', async () => {
-  const input = $('#tunnel-token-input');
-  try {
-    await api('/api/tunnel/token', { method: 'POST', body: JSON.stringify({ token: input.value }) });
-    input.value = '';
-    $('#tunnel-msg').textContent = 'Token saved. It will not be shown again.';
-  } catch (err) {
-    $('#tunnel-msg').textContent = err.message;
   }
 });
 
@@ -555,8 +530,6 @@ function connectSocket() {
     $('#modal-footer').textContent = `history: ${history.length} previous run(s)`;
   });
 
-  socket.on('tunnel:status', renderTunnel);
-
   socket.on('connect_error', (err) => {
     if (String(err.message).includes('unauthorized')) showLogin();
   });
@@ -577,7 +550,6 @@ async function boot() {
   try {
     renderApps(await api('/api/apps'));
     renderWorkflows(await api('/api/workflows'));
-    renderTunnel(await api('/api/tunnel'));
     renderHealth(await api('/api/health'));
   } catch { /* socket will fill in */ }
 }

@@ -30,10 +30,8 @@
       <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
       <button class="tab-btn" data-tab="apps">Apps</button>
       <button class="tab-btn" data-tab="workflows">Workflows</button>
-      <button class="tab-btn" data-tab="tunnels">Tunnels</button>
       <button class="tab-btn" data-tab="terminal">Terminal</button>
       <button class="tab-btn" data-tab="settings">Settings</button>
-      <span id="tunnel-badge" class="badge hidden">TUNNEL ACTIVE</span>
       <button id="logout-btn" class="btn ghost small" title="Log out">⏻</button>
     </nav>
   </header>
@@ -121,7 +119,13 @@
         </div>
 
         <div class="grid2">
-          <label>Start command
+          <label>Port <span class="muted">(required for static sites; exported as <code>$PORT</code> for command apps)</span>
+            <input name="port" type="number" min="1" max="65535" placeholder="8081">
+          </label>
+          <label class="check" style="align-self:end"><input type="checkbox" name="isStatic" id="app-static"> Static site — serve files over HTTP, no command</label>
+        </div>
+        <div class="grid2">
+          <label id="command-field">Start command
             <input name="command" required placeholder="node server.js">
           </label>
           <label>Working directory <span class="muted">(optional — defaults to app dir)</span>
@@ -137,8 +141,8 @@
       </form>
 
       <table class="tbl" id="apps-table">
-        <thead><tr><th>Name</th><th>Status</th><th>Uptime</th><th>Restarts</th><th>Actions</th></tr></thead>
-        <tbody><tr><td colspan="5" class="muted">no apps yet</td></tr></tbody>
+        <thead><tr><th>Name</th><th>Status</th><th>Port</th><th>Uptime</th><th>Restarts</th><th>Actions</th></tr></thead>
+        <tbody><tr><td colspan="6" class="muted">no apps yet</td></tr></tbody>
       </table>
     </section>
 
@@ -167,49 +171,6 @@
       </form>
 
       <div id="wf-list"></div>
-    </section>
-
-    <!-- ===================== TUNNELS ===================== -->
-    <section id="tab-tunnels" class="tab-panel">
-      <h2>Cloudflare tunnel</h2>
-      <div class="panel warn-panel">
-        <strong>Heads up:</strong> this exposes whatever hostname(s) you configured in Cloudflare
-        to the public internet via your own domain. Configure and review hostname mappings in the
-        Cloudflare Zero Trust dashboard — this app only starts/stops the tunnel connection itself.
-        Stop the tunnel when you don't need remote access.
-      </div>
-
-      <div class="panel">
-        <h3>Status</h3>
-        <p>State: <span id="tunnel-state" class="pill">–</span>
-           <span id="tunnel-since" class="muted"></span></p>
-        <p>cloudflared binary: <span id="tunnel-binary" class="muted">–</span></p>
-        <p>Tunnel token: <span id="tunnel-token-state" class="muted">–</span></p>
-        <div class="row">
-          <button class="btn primary" id="tunnel-start">Start tunnel</button>
-          <button class="btn danger" id="tunnel-stop">Stop tunnel</button>
-        </div>
-      </div>
-
-      <div class="panel">
-        <h3>Save / replace tunnel token</h3>
-        <p class="muted">One-time setup: in the Cloudflare Zero Trust dashboard, create a named tunnel,
-        add a Public Hostname on your domain (e.g. <code>deploy.yourdomain.com</code> →
-        <code>localhost:8080</code>), and copy the tunnel's token. Paste it here once —
-        it is stored in <code>state.json</code> and never shown again.<br>
-        cloudflared is not in Debian's repos — add Cloudflare's official apt repo (you are root, no sudo needed):
-        <code>mkdir -p --mode=0755 /usr/share/keyrings && curl -fsSL https://pkg.cloudflare.com/cloudflare-public-v2.gpg -o /usr/share/keyrings/cloudflare-public-v2.gpg && echo 'deb [signed-by=/usr/share/keyrings/cloudflare-public-v2.gpg] https://pkg.cloudflare.com/cloudflared any main' > /etc/apt/sources.list.d/cloudflared.list && apt-get update && apt-get install -y cloudflared</code></p>
-        <div class="row">
-          <input type="password" id="tunnel-token-input" placeholder="eyJhIjo..." autocomplete="off">
-          <button class="btn primary" id="tunnel-token-save">Save token</button>
-        </div>
-        <p id="tunnel-msg" class="muted"></p>
-      </div>
-
-      <div class="panel">
-        <h3>Recent cloudflared output</h3>
-        <pre id="tunnel-log" class="logbox">–</pre>
-      </div>
     </section>
 
     <!-- ===================== TERMINAL ===================== -->
@@ -247,9 +208,8 @@
         <h3>Security notes</h3>
         <ul>
           <li><strong>This server runs as root</strong> inside the proot-distro Debian container. Every app, workflow and terminal session executes with root privileges — that is the deploy/workflow feature by design, and the access token is the only gate.</li>
-          <li>Traffic is plain HTTP on your LAN by default. Prefer using it over the Cloudflare tunnel (HTTPS on your own domain) when away from home.</li>
+          <li>Traffic is plain HTTP on your LAN. Apps bind <code>0.0.0.0</code>, so any port you assign is reachable by every device on the network — only assign ports you mean to share.</li>
           <li>Login is rate-limited (5 tries / 60s lockout) and the token is compared in constant time.</li>
-          <li>The Cloudflare tunnel token is a secret too — it is stored in <code>state.json</code> (mode 600) and never echoed back in full.</li>
           <li>proot is not a hard security boundary: paths bound from Termux/Android shared storage are reachable from inside the container.</li>
         </ul>
       </div>

@@ -8,14 +8,12 @@ import { isValidSessionCookie, requireAuth } from './auth';
 import { AppsManager } from './apps-manager';
 import { getState, loadState } from './state';
 import { StatsEmitter } from './system-stats';
-import { TunnelManager } from './tunnel-manager';
 import { WorkflowsManager } from './workflows-manager';
 import { resolveShell } from './shell';
 
 import { authRoutes } from './routes/auth.routes';
 import { appsRoutes } from './routes/apps.routes';
 import { settingsRoutes } from './routes/settings.routes';
-import { tunnelsRoutes } from './routes/tunnels.routes';
 import { workflowsRoutes } from './routes/workflows.routes';
 
 // node-pty is a native module compiled on-device (aarch64, inside the proot Debian container).
@@ -56,7 +54,6 @@ app.disable('x-powered-by');
 // ---- managers ----
 const apps = new AppsManager(io);
 const workflows = new WorkflowsManager(io);
-const tunnel = new TunnelManager(io);
 const stats = new StatsEmitter(io, () => requestCount);
 
 // ---- public routes ----
@@ -74,7 +71,6 @@ api.get('/health', (_req, res) => {
 });
 api.use(appsRoutes(apps));
 api.use(workflowsRoutes(workflows));
-api.use(tunnelsRoutes(tunnel));
 api.use(settingsRoutes());
 app.use('/api', api);
 
@@ -97,7 +93,6 @@ io.on('connection', (socket: Socket) => {
   // Push current state so a freshly opened tab is in sync immediately.
   socket.emit('app:status', apps.list());
   socket.emit('workflow:status', workflows.list());
-  socket.emit('tunnel:status', tunnel.status());
 
   socket.on('app:subscribe', (name: unknown) => {
     if (typeof name === 'string') apps.subscribe(socket, name);

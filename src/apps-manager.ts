@@ -1,12 +1,15 @@
 import { ChildProcess, spawn } from 'child_process';
+import http from 'http';
 import { Server, Socket } from 'socket.io';
 import { AppConfig, getState, saveState } from './state';
 import { resolveShell } from './shell';
+import { createStaticServer } from './static-server';
 
 export type AppStatus = 'running' | 'stopped' | 'crashed';
 
 interface Runtime {
   proc: ChildProcess | null;
+  srv: http.Server | null; // set for static-site apps (in-process server)
   status: AppStatus;
   startedAt: number | null;
   restarts: number;
@@ -35,6 +38,7 @@ export class AppsManager {
     if (!r) {
       r = {
         proc: null,
+        srv: null,
         status: 'stopped',
         startedAt: null,
         restarts: 0,
@@ -95,16 +99,26 @@ export class AppsManager {
     const cfg = this.getConfig(name);
     if (!cfg) throw new Error(`Unknown app "${name}"`);
     const r = this.ensureRt(name);
-    if (r.proc) return; // already running
+    if (r.proc || r.srv) return; // already running
 
     r.stopping = false;
     r.restartAfterExit = false;
+
+    if (cfg.static) {
+      this.startStatic(name, cfg, r);
+      return;
+    }
 
     let proc: ChildProcess;
     try {
       proc = spawn(resolveShell(), ['-c', cfg.command], {
         cwd: cfg.cwd,
-        env: { ...process.env, APP_NAME: name },
+        env: {
+          ...process.env,
+          APP_NAME: name,
+          // Assigned port is exported so the app can bind it without hardcoding.
+          ...(cfg.port ? { PORT: String(cfg.port) } : {}),
+        },
         stdio: ['ignore', 'pipe', 'pipe'],
       });
     } catch (err) {
@@ -148,8 +162,49 @@ export class AppsManager {
     this.emitStatus();
   }
 
+  /** Static-site apps: in-process HTTP server instead of a child process. */
+  private startStatic(name: string, cfg: AppConfig, r: Runtime): void {
+    if (!cfg.port) {
+      r.status = 'crashed';
+      this.appendLog(name, '[deploy-gui] static site needs a port — set one on the app\n');
+      this.emitStatus();
+      throw new Error(`Static app "${name}" has no port assigned`);
+    }
+    const srv = createStaticServer(cfg.cwd, (line) => this.appendLog(name, `${line}\n`));
+    srv.on('error', (err) => {
+      r.srv = null;
+      r.status = 'crashed';
+      r.startedAt = null;
+      this.appendLog(name, `\n[deploy-gui] static server error: ${String(err)}\n`);
+      this.emitStatus();
+    });
+    r.srv = srv;
+    srv.listen(cfg.port, '0.0.0.0', () => {
+      r.status = 'running';
+      r.startedAt = Date.now();
+      this.appendLog(name, `\n[deploy-gui] serving ${cfg.cwd} on http://0.0.0.0:${cfg.port}\n`);
+      this.emitStatus();
+    });
+    this.emitStatus();
+  }
+
   stop(name: string): void {
     const r = this.ensureRt(name);
+    if (r.srv) {
+      r.stopping = true;
+      const srv = r.srv;
+      r.srv = null;
+      this.appendLog(name, '\n[deploy-gui] stopping static server\n');
+      try {
+        srv.close();
+      } catch {
+        /* ignore */
+      }
+      r.status = 'stopped';
+      r.startedAt = null;
+      this.emitStatus();
+      return;
+    }
     const proc = r.proc;
     if (!proc) {
       if (r.status !== 'stopped') {
@@ -182,6 +237,12 @@ export class AppsManager {
 
   restart(name: string): void {
     const r = this.ensureRt(name);
+    if (r.srv) {
+      this.stop(name);
+      r.restarts += 1;
+      this.start(name);
+      return;
+    }
     if (r.proc) {
       r.restartAfterExit = true;
       this.stopInternalForRestart(name, r);

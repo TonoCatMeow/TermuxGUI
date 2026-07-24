@@ -14,6 +14,22 @@ function err(res: { status: (n: number) => { json: (b: unknown) => void } }, e: 
   res.status(code).json({ error: e instanceof Error ? e.message : String(e) });
 }
 
+function truthy(v: unknown): boolean {
+  return v === true || v === 'true' || v === 'on' || v === '1';
+}
+
+function parsePort(v: unknown, required: boolean): number | undefined {
+  if (v === undefined || v === null || v === '') {
+    if (required) throw new Error('Port required for static sites');
+    return undefined;
+  }
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 1 || n > 65535) {
+    throw new Error('Port must be an integer between 1 and 65535');
+  }
+  return n;
+}
+
 export function appsRoutes(apps: AppsManager): Router {
   const r = Router();
 
@@ -27,9 +43,11 @@ export function appsRoutes(apps: AppsManager): Router {
       const body = req.body as Record<string, unknown>;
       const name = sanitizeName(body.name);
       const method = body.method;
+      const isStatic = truthy(body.isStatic ?? body.static);
       const command = String(body.command ?? '').trim();
-      if (!command) throw new Error('Start command required');
-      const autoStart = body.autoStart === true || body.autoStart === 'true';
+      if (!isStatic && !command) throw new Error('Start command required');
+      const port = parsePort(body.port, isStatic);
+      const autoStart = truthy(body.autoStart);
 
       let cwd: string;
       let repoUrl: string | undefined;
@@ -56,6 +74,8 @@ export function appsRoutes(apps: AppsManager): Router {
         cwd: customCwd || cwd,
         repoUrl,
         autoStart,
+        static: isStatic,
+        port,
         createdAt: Date.now(),
       };
       apps.addApp(cfg);
@@ -69,10 +89,12 @@ export function appsRoutes(apps: AppsManager): Router {
   r.post('/apps/upload', upload.single('file'), (req, res) => {
     try {
       const name = sanitizeName(req.body?.name);
+      const isStatic = truthy(req.body?.isStatic ?? req.body?.static);
       const command = String(req.body?.command ?? '').trim();
-      if (!command) throw new Error('Start command required');
+      if (!isStatic && !command) throw new Error('Start command required');
+      const port = parsePort(req.body?.port, isStatic);
       if (!req.file) throw new Error('No zip file uploaded');
-      const autoStart = req.body?.autoStart === 'true' || req.body?.autoStart === 'on';
+      const autoStart = truthy(req.body?.autoStart);
 
       const result = extractZip(req.file.buffer, name);
       const customCwd = typeof req.body?.cwd === 'string' && req.body.cwd.trim() ? req.body.cwd.trim() : null;
@@ -82,6 +104,8 @@ export function appsRoutes(apps: AppsManager): Router {
         command,
         cwd: customCwd || result.dir,
         autoStart,
+        static: isStatic,
+        port,
         createdAt: Date.now(),
       };
       apps.addApp(cfg);

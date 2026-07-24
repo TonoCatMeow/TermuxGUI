@@ -12,6 +12,10 @@ export interface AppConfig {
   cwd: string;
   repoUrl?: string;
   autoStart: boolean;
+  /** Serve cwd over HTTP with the built-in static server instead of running a command. */
+  static?: boolean;
+  /** Assigned port: static sites listen on it; for command apps it's exported as $PORT. */
+  port?: number;
   createdAt: number;
 }
 
@@ -32,7 +36,6 @@ export interface Workflow {
 export interface StateData {
   accessToken: string;
   sessionSecret: string;
-  tunnelToken: string | null;
   apps: AppConfig[];
   workflows: Workflow[];
 }
@@ -67,7 +70,6 @@ export function loadState(): StateData {
     state = {
       accessToken: loaded.accessToken,
       sessionSecret: loaded.sessionSecret,
-      tunnelToken: typeof loaded.tunnelToken === 'string' ? loaded.tunnelToken : null,
       apps: Array.isArray(loaded.apps) ? loaded.apps : [],
       workflows: Array.isArray(loaded.workflows) ? loaded.workflows : [],
     };
@@ -75,7 +77,6 @@ export function loadState(): StateData {
     state = {
       accessToken: generateToken(),
       sessionSecret: crypto.randomBytes(32).toString('hex'),
-      tunnelToken: null,
       apps: [],
       workflows: [],
     };
