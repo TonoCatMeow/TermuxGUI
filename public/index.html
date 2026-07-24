@@ -191,8 +191,8 @@
         add a Public Hostname on your domain (e.g. <code>deploy.yourdomain.com</code> →
         <code>localhost:8080</code>), and copy the tunnel's token. Paste it here once —
         it is stored in <code>state.json</code> and never shown again.<br>
-        cloudflared is not in Debian's repos — install the ARM64 .deb as root:
-        <code>curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64.deb -o /tmp/cf.deb && dpkg -i /tmp/cf.deb</code></p>
+        cloudflared is not in Debian's repos — add Cloudflare's official apt repo (you are root, no sudo needed):
+        <code>mkdir -p --mode=0755 /usr/share/keyrings && curl -fsSL https://pkg.cloudflare.com/cloudflare-public-v2.gpg -o /usr/share/keyrings/cloudflare-public-v2.gpg && echo 'deb [signed-by=/usr/share/keyrings/cloudflare-public-v2.gpg] https://pkg.cloudflare.com/cloudflared any main' > /etc/apt/sources.list.d/cloudflared.list && apt-get update && apt-get install -y cloudflared</code></p>
         <div class="row">
           <input type="password" id="tunnel-token-input" placeholder="eyJhIjo..." autocomplete="off">
           <button class="btn primary" id="tunnel-token-save">Save token</button>

@@ -62,8 +62,7 @@ export class TunnelManager {
     if (!token) throw new Error('No tunnel token saved — paste one first');
     if (!this.binaryAvailable()) {
       throw new Error(
-        'cloudflared not found — install the ARM64 .deb (see README): ' +
-        'curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64.deb -o /tmp/cf.deb && dpkg -i /tmp/cf.deb'
+        'cloudflared not found — install it from Cloudflare\'s apt repo (see README / Tunnels help)'
       );
     }
 

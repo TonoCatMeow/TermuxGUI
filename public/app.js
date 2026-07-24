@@ -367,7 +367,7 @@ function renderTunnel(t) {
   $('#tunnel-since').textContent = t.running && t.since ? `since ${new Date(t.since).toLocaleTimeString()}` : '';
   $('#tunnel-binary').textContent = t.binaryAvailable
     ? 'found'
-    : 'NOT FOUND — install the ARM64 .deb (see README / Tunnels help)';
+    : 'NOT FOUND — install from Cloudflare apt repo (see README / Tunnels help)';
   $('#tunnel-token-state').textContent = t.tokenSaved ? 'token saved ✓ (hidden)' : 'no token saved';
   $('#tunnel-start').disabled = t.running || !t.tokenSaved || !t.binaryAvailable;
   $('#tunnel-stop').disabled = !t.running;

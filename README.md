@@ -50,9 +50,21 @@ as root:
 ```sh
 apt update
 apt install -y nodejs npm git curl python3 make g++
-# cloudflared is NOT in Debian's repos — install the official ARM64 .deb:
-curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64.deb -o /tmp/cf.deb
-dpkg -i /tmp/cf.deb   # or: apt install -y /tmp/cf.deb
+```
+
+cloudflared is NOT in Debian's repos — add Cloudflare's official apt repo
+(already root in the container, so no `sudo` needed):
+
+```sh
+# Add Cloudflare's GPG key
+mkdir -p --mode=0755 /usr/share/keyrings
+curl -fsSL https://pkg.cloudflare.com/cloudflare-public-v2.gpg -o /usr/share/keyrings/cloudflare-public-v2.gpg
+
+# Add the repo to apt sources
+echo 'deb [signed-by=/usr/share/keyrings/cloudflare-public-v2.gpg] https://pkg.cloudflare.com/cloudflared any main' > /etc/apt/sources.list.d/cloudflared.list
+
+# Install cloudflared
+apt-get update && apt-get install -y cloudflared
 ```
 
 > Debian 12 (bookworm) ships Node 18, which satisfies the Node 18+ requirement.
