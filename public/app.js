@@ -150,6 +150,19 @@ function renderHealth(h) {
   $('#ram-bar').className = barClass(h.ram.percent);
   $('#ram-bar').style.width = `${Math.min(100, h.ram.percent)}%`;
 
+  const sw = h.swap || { used: 0, total: 0, percent: 0 };
+  if (sw.total > 0) {
+    $('#swap-val').textContent = `${sw.percent.toFixed(1)}%`;
+    $('#swap-sub').textContent = `${fmtBytes(sw.used)} / ${fmtBytes(sw.total)}`;
+    $('#swap-bar').className = barClass(sw.percent);
+    $('#swap-bar').style.width = `${Math.min(100, sw.percent)}%`;
+  } else {
+    $('#swap-val').textContent = 'none';
+    $('#swap-sub').textContent = 'no swap configured';
+    $('#swap-bar').className = 'bar-fill';
+    $('#swap-bar').style.width = '0';
+  }
+
   $('#storage-val').textContent = `${h.storage.percent.toFixed(1)}%`;
   $('#storage-sub').textContent = `${fmtBytes(h.storage.used)} / ${fmtBytes(h.storage.total)} (${h.storage.mount})`;
   $('#storage-bar').className = barClass(h.storage.percent);

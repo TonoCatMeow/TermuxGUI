@@ -1,3 +1,4 @@
+import fs from 'fs';
 import os from 'os';
 import si from 'systeminformation';
 import { Server } from 'socket.io';
@@ -13,6 +14,7 @@ export interface HealthPayload {
   ts: number;
   cpuPercent: number;
   ram: { used: number; total: number; percent: number };
+  swap: { used: number; total: number; percent: number };
   storage: { used: number; total: number; percent: number; mount: string };
   uptimeSec: number;
   requests: number;
@@ -25,6 +27,7 @@ const TOP_N = 6;
 async function gather(getRequests: () => number): Promise<HealthPayload> {
   let cpuPercent = 0;
   let ram = { used: 0, total: os.totalmem(), percent: 0 };
+  let swap = { used: 0, total: 0, percent: 0 };
   let storage = { used: 0, total: 0, percent: 0, mount: '/' };
   let processes: ProcessInfo[] = [];
 
@@ -36,17 +39,47 @@ async function gather(getRequests: () => number): Promise<HealthPayload> {
     cpuPercent = Math.min(100, Math.round((avg / Math.max(1, os.cpus().length)) * 1000) / 10);
   }
 
+  // NOTE: si.mem().used is (total - free), which counts kernel buffers/cache as
+  // "used" and massively overstates real usage on Android kernels. What users
+  // (and `free -h`) consider used is (total - available).
   try {
     const mem = await si.mem();
+    const available = mem.available > 0 ? mem.available : mem.free;
+    const used = Math.max(0, mem.total - available);
     ram = {
-      used: mem.used,
+      used,
       total: mem.total,
-      percent: mem.total > 0 ? Math.round((mem.used / mem.total) * 1000) / 10 : 0,
+      percent: mem.total > 0 ? Math.round((used / mem.total) * 1000) / 10 : 0,
+    };
+    swap = {
+      used: mem.swapused,
+      total: mem.swaptotal,
+      percent: mem.swaptotal > 0 ? Math.round((mem.swapused / mem.swaptotal) * 1000) / 10 : 0,
     };
   } catch {
-    const total = os.totalmem();
-    const used = total - os.freemem();
-    ram = { used, total, percent: total > 0 ? Math.round((used / total) * 1000) / 10 : 0 };
+    // Fallback: read /proc/meminfo directly (host kernel values — also works in proot).
+    try {
+      const mi = fs.readFileSync('/proc/meminfo', 'utf8');
+      const grab = (key: string): number => {
+        const m = mi.match(new RegExp(`^${key}:\\s+(\\d+) kB`, 'm'));
+        return m ? Number(m[1]) * 1024 : 0;
+      };
+      const total = grab('MemTotal');
+      const available = grab('MemAvailable') || grab('MemFree');
+      const used = Math.max(0, total - available);
+      ram = { used, total, percent: total > 0 ? Math.round((used / total) * 1000) / 10 : 0 };
+      const swapTotal = grab('SwapTotal');
+      const swapFree = grab('SwapFree');
+      swap = {
+        used: Math.max(0, swapTotal - swapFree),
+        total: swapTotal,
+        percent: swapTotal > 0 ? Math.round(((swapTotal - swapFree) / swapTotal) * 1000) / 10 : 0,
+      };
+    } catch {
+      const total = os.totalmem();
+      const used = total - os.freemem();
+      ram = { used, total, percent: total > 0 ? Math.round((used / total) * 1000) / 10 : 0 };
+    }
   }
 
   try {
@@ -89,6 +122,7 @@ async function gather(getRequests: () => number): Promise<HealthPayload> {
     ts: Date.now(),
     cpuPercent,
     ram,
+    swap,
     storage,
     uptimeSec: os.uptime(),
     requests: getRequests(),
