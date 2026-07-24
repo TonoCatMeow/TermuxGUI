@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>deploy-gui</title>
+<link rel="stylesheet" href="/vendor/xterm.css">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<!-- ===================== LOGIN ===================== -->
+<div id="login-overlay" class="hidden">
+  <div class="login-card">
+    <h1>deploy-gui</h1>
+    <p class="muted">Paste the access token printed in the Termux terminal.</p>
+    <form id="login-form">
+      <input type="password" id="login-token" placeholder="access token" autocomplete="off" autofocus>
+      <button type="submit" class="btn primary block">Log in</button>
+    </form>
+    <p id="login-error" class="error"></p>
+  </div>
+</div>
+
+<!-- ===================== APP SHELL ===================== -->
+<div id="app-shell" class="hidden">
+  <header>
+    <nav id="tabs">
+      <span class="brand">deploy-gui</span>
+      <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+      <button class="tab-btn" data-tab="apps">Apps</button>
+      <button class="tab-btn" data-tab="workflows">Workflows</button>
+      <button class="tab-btn" data-tab="tunnels">Tunnels</button>
+      <button class="tab-btn" data-tab="terminal">Terminal</button>
+      <button class="tab-btn" data-tab="settings">Settings</button>
+      <span id="tunnel-badge" class="badge hidden">TUNNEL ACTIVE</span>
+      <button id="logout-btn" class="btn ghost small" title="Log out">⏻</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ===================== DASHBOARD ===================== -->
+    <section id="tab-dashboard" class="tab-panel active">
+      <div class="cards">
+        <div class="card">
+          <h3>CPU</h3>
+          <div class="big" id="cpu-val">–</div>
+          <div class="bar"><div class="bar-fill" id="cpu-bar"></div></div>
+        </div>
+        <div class="card">
+          <h3>RAM</h3>
+          <div class="big" id="ram-val">–</div>
+          <div class="sub" id="ram-sub">–</div>
+          <div class="bar"><div class="bar-fill" id="ram-bar"></div></div>
+        </div>
+        <div class="card">
+          <h3>Storage</h3>
+          <div class="big" id="storage-val">–</div>
+          <div class="sub" id="storage-sub">–</div>
+          <div class="bar"><div class="bar-fill" id="storage-bar"></div></div>
+        </div>
+        <div class="card">
+          <h3>Uptime</h3>
+          <div class="big" id="uptime-val">–</div>
+        </div>
+        <div class="card">
+          <h3>Requests</h3>
+          <div class="big" id="requests-val">–</div>
+        </div>
+      </div>
+      <h2>Top processes</h2>
+      <table class="tbl" id="proc-table">
+        <thead><tr><th>PID</th><th>Name</th><th>CPU %</th><th>MEM %</th></tr></thead>
+        <tbody><tr><td colspan="4" class="muted">waiting for data…</td></tr></tbody>
+      </table>
+    </section>
+
+    <!-- ===================== APPS ===================== -->
+    <section id="tab-apps" class="tab-panel">
+      <div class="row spread">
+        <h2>Deployed apps</h2>
+        <button class="btn primary" id="new-app-btn">+ New App</button>
+      </div>
+
+      <form id="new-app-form" class="panel hidden">
+        <div class="grid2">
+          <label>App name
+            <input name="name" required pattern="[A-Za-z0-9][A-Za-z0-9_\-]{0,39}" placeholder="my-app">
+          </label>
+          <label>Deploy method
+            <select name="method" id="app-method">
+              <option value="git">Git clone / pull</option>
+              <option value="upload">Zip upload</option>
+              <option value="inline">Paste / edit inline</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="method-field method-git">Git repo URL
+          <input name="repoUrl" placeholder="https://github.com/you/repo.git">
+        </label>
+
+        <label class="method-field method-upload hidden">Zip file
+          <input type="file" name="file" accept=".zip,application/zip">
+        </label>
+
+        <div class="method-field method-inline hidden grid2">
+          <label>Filename
+            <input name="filename" placeholder="script.sh">
+          </label>
+          <span></span>
+          <label class="full">Content
+            <textarea name="content" rows="6" placeholder="#!/data/data/com.termux/files/usr/bin/bash&#10;echo hello"></textarea>
+          </label>
+        </div>
+
+        <div class="grid2">
+          <label>Start command
+            <input name="command" required placeholder="node server.js">
+          </label>
+          <label>Working directory <span class="muted">(optional — defaults to app dir)</span>
+            <input name="cwd" placeholder="~/deploy-apps/my-app">
+          </label>
+        </div>
+        <label class="check"><input type="checkbox" name="autoStart" checked> Start immediately after deploy</label>
+        <div class="row">
+          <button type="submit" class="btn primary">Deploy</button>
+          <button type="button" class="btn ghost" id="new-app-cancel">Cancel</button>
+          <span id="app-form-msg" class="muted"></span>
+        </div>
+      </form>
+
+      <table class="tbl" id="apps-table">
+        <thead><tr><th>Name</th><th>Status</th><th>Uptime</th><th>Restarts</th><th>Actions</th></tr></thead>
+        <tbody><tr><td colspan="5" class="muted">no apps yet</td></tr></tbody>
+      </table>
+    </section>
+
+    <!-- ===================== WORKFLOWS ===================== -->
+    <section id="tab-workflows" class="tab-panel">
+      <div class="row spread">
+        <h2>Saved workflows</h2>
+        <button class="btn primary" id="new-wf-btn">+ New Workflow</button>
+      </div>
+
+      <form id="new-wf-form" class="panel hidden">
+        <label>Name
+          <input name="name" required placeholder="Backup Downloads">
+        </label>
+        <label>Shell command / script
+          <textarea name="command" rows="4" required placeholder="tar -czf ~/backups/dl-$(date +%F).tgz ~/storage/downloads"></textarea>
+        </label>
+        <label>Working directory <span class="muted">(optional)</span>
+          <input name="cwd" placeholder="~">
+        </label>
+        <div class="row">
+          <button type="submit" class="btn primary">Save</button>
+          <button type="button" class="btn ghost" id="new-wf-cancel">Cancel</button>
+          <span id="wf-form-msg" class="muted"></span>
+        </div>
+      </form>
+
+      <div id="wf-list"></div>
+    </section>
+
+    <!-- ===================== TUNNELS ===================== -->
+    <section id="tab-tunnels" class="tab-panel">
+      <h2>Cloudflare tunnel</h2>
+      <div class="panel warn-panel">
+        <strong>Heads up:</strong> this exposes whatever hostname(s) you configured in Cloudflare
+        to the public internet via your own domain. Configure and review hostname mappings in the
+        Cloudflare Zero Trust dashboard — this app only starts/stops the tunnel connection itself.
+        Stop the tunnel when you don't need remote access.
+      </div>
+
+      <div class="panel">
+        <h3>Status</h3>
+        <p>State: <span id="tunnel-state" class="pill">–</span>
+           <span id="tunnel-since" class="muted"></span></p>
+        <p>cloudflared binary: <span id="tunnel-binary" class="muted">–</span></p>
+        <p>Tunnel token: <span id="tunnel-token-state" class="muted">–</span></p>
+        <div class="row">
+          <button class="btn primary" id="tunnel-start">Start tunnel</button>
+          <button class="btn danger" id="tunnel-stop">Stop tunnel</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Save / replace tunnel token</h3>
+        <p class="muted">One-time setup: in the Cloudflare Zero Trust dashboard, create a named tunnel,
+        add a Public Hostname on your domain (e.g. <code>deploy.yourdomain.com</code> →
+        <code>localhost:8080</code>), and copy the tunnel's token. Paste it here once —
+        it is stored in <code>state.json</code> and never shown again.</p>
+        <div class="row">
+          <input type="password" id="tunnel-token-input" placeholder="eyJhIjo..." autocomplete="off">
+          <button class="btn primary" id="tunnel-token-save">Save token</button>
+        </div>
+        <p id="tunnel-msg" class="muted"></p>
+      </div>
+
+      <div class="panel">
+        <h3>Recent cloudflared output</h3>
+        <pre id="tunnel-log" class="logbox">–</pre>
+      </div>
+    </section>
+
+    <!-- ===================== TERMINAL ===================== -->
+    <section id="tab-terminal" class="tab-panel">
+      <div class="row">
+        <button class="btn small" id="term-copy">Copy</button>
+        <button class="btn small" id="term-paste">Paste</button>
+        <button class="btn small ghost" id="term-reconnect">New session</button>
+        <span class="muted small-note">Ctrl+Shift+V pastes too. Each browser tab gets its own shell.</span>
+      </div>
+      <div id="terminal-container"></div>
+    </section>
+
+    <!-- ===================== SETTINGS ===================== -->
+    <section id="tab-settings" class="tab-panel">
+      <h2>Settings</h2>
+      <div class="panel">
+        <h3>Access token</h3>
+        <p class="muted">The token is the only gate on a GUI that can run arbitrary code on this phone.
+        Treat it like a server room key.</p>
+        <button class="btn danger" id="regen-token-btn">Regenerate access token</button>
+        <div id="new-token-box" class="hidden">
+          <p><strong>New token (shown once — copy it now):</strong></p>
+          <code id="new-token-val" class="token-box"></code>
+          <button class="btn small" id="copy-token-btn">Copy</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Environment</h3>
+        <table class="tbl">
+          <tbody id="env-table"><tr><td class="muted">loading…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="panel warn-panel">
+        <h3>Security notes</h3>
+        <ul>
+          <li>This GUI can execute arbitrary code on the phone — that is the deploy/workflow feature by design.</li>
+          <li>Traffic is plain HTTP on your LAN by default. Prefer using it over the Cloudflare tunnel (HTTPS on your own domain) when away from home.</li>
+          <li>Login is rate-limited (5 tries / 60s lockout) and the token is compared in constant time.</li>
+          <li>The Cloudflare tunnel token is a secret too — it is stored in <code>state.json</code> (mode 600) and never echoed back in full.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===================== GENERIC MODAL (logs / workflow output) ===================== -->
+  <div id="modal" class="hidden">
+    <div class="modal-card">
+      <div class="row spread">
+        <h3 id="modal-title">Output</h3>
+        <button class="btn ghost small" id="modal-close">✕</button>
+      </div>
+      <pre id="modal-body" class="logbox tall"></pre>
+      <div class="row spread">
+        <span id="modal-footer" class="muted"></span>
+        <button class="btn small" id="modal-copy">Copy</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/vendor/xterm.js"></script>
+<script src="/vendor/xterm-addon-fit.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

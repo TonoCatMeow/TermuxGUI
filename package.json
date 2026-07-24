@@ -1,0 +1,30 @@
+{
+  "name": "deploy-gui",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Termux Deploy-Server GUI — manage apps, workflows, health, Cloudflare tunnels and a browser terminal on Android via Termux",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.10",
+    "express": "^4.19.2",
+    "multer": "^2.2.0",
+    "node-pty": "^1.0.0",
+    "socket.io": "^4.7.5",
+    "systeminformation": "^5.22.11"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.5",
+    "@types/express": "^4.17.21",
+    "@types/multer": "^1.4.11",
+    "@types/node": "^20.14.0",
+    "typescript": "^5.4.5"
+  }
+}
