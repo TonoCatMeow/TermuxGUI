@@ -2,12 +2,13 @@ import { execFileSync } from 'child_process';
 import fs from 'fs';
 
 /**
- * Termux-aware shell resolution.
+ * Shell resolution for proot-distro Debian (running as root).
  *
- * Do NOT hardcode /bin/bash — on Termux the shell lives under $PREFIX
- * (e.g. /data/data/com.termux/files/usr/bin/bash) and /bin/bash does not exist.
- * Resolution order: $SHELL -> `which bash` -> $PREFIX/bin/bash -> $PREFIX/bin/sh
- * -> /bin/bash -> /bin/sh -> bare "sh" (PATH lookup).
+ * Inside proot Debian, /bin/bash exists at the standard FHS path and
+ * $SHELL is normally /bin/bash. We still resolve defensively instead of
+ * hardcoding: $SHELL -> `which bash` -> /bin/bash -> /usr/bin/bash -> /bin/sh.
+ * (The old Termux $PREFIX path is kept as a last-ditch fallback in case this
+ * ever runs in a plain Termux shell instead of the proot container.)
  */
 let cached: string | null = null;
 
@@ -25,11 +26,11 @@ export function resolveShell(): string {
     /* which not available or bash not found */
   }
 
+  candidates.push('/bin/bash', '/usr/bin/bash', '/bin/sh');
+
   if (process.env.PREFIX) {
     candidates.push(`${process.env.PREFIX}/bin/bash`, `${process.env.PREFIX}/bin/sh`);
   }
-
-  candidates.push('/bin/bash', '/bin/sh');
 
   for (const c of candidates) {
     try {

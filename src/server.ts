@@ -18,7 +18,7 @@ import { settingsRoutes } from './routes/settings.routes';
 import { tunnelsRoutes } from './routes/tunnels.routes';
 import { workflowsRoutes } from './routes/workflows.routes';
 
-// node-pty is a native module compiled on-device (aarch64, inside Termux).
+// node-pty is a native module compiled on-device (aarch64, inside the proot Debian container).
 // Load it lazily so the rest of the server still starts if it's missing.
 type IPty = {
   pid: number;
@@ -194,7 +194,8 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`  Access token (paste once in the browser login screen):`);
   console.log(`  ${token}`);
   console.log('');
-  console.log('  This GUI can run arbitrary commands on this device.');
+  console.log('  Running as ROOT inside proot-distro Debian.');
+  console.log('  This GUI can run arbitrary commands with those privileges.');
   console.log('  Treat the token like a server room key.');
   console.log(line);
 });

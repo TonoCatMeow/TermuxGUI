@@ -1,4 +1,5 @@
 import { spawnSync } from 'child_process';
+import os from 'os';
 import { Router } from 'express';
 import { createSession, regenerateAccessToken } from '../auth';
 import { resolveShell } from '../shell';
@@ -25,9 +26,17 @@ export function settingsRoutes(): Router {
 
   r.get('/settings', (_req, res) => {
     const sshdInstalled = whichOk('sshd');
+    let user = 'unknown';
+    try {
+      user = os.userInfo().username;
+    } catch {
+      /* ignore */
+    }
     res.json({
       shell: resolveShell(),
-      prefix: process.env.PREFIX || null,
+      user,
+      uid: typeof process.getuid === 'function' ? process.getuid() : null,
+      home: os.homedir(),
       dataDir: DATA_DIR,
       stateFile: STATE_FILE,
       sshd: {

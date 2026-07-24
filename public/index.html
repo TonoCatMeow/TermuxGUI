@@ -13,7 +13,7 @@
 <div id="login-overlay" class="hidden">
   <div class="login-card">
     <h1>deploy-gui</h1>
-    <p class="muted">Paste the access token printed in the Termux terminal.</p>
+    <p class="muted">Paste the access token printed in the Debian (proot) terminal.</p>
     <form id="login-form">
       <input type="password" id="login-token" placeholder="access token" autocomplete="off" autofocus>
       <button type="submit" class="btn primary block">Log in</button>
@@ -110,7 +110,7 @@
           </label>
           <span></span>
           <label class="full">Content
-            <textarea name="content" rows="6" placeholder="#!/data/data/com.termux/files/usr/bin/bash&#10;echo hello"></textarea>
+            <textarea name="content" rows="6" placeholder="#!/bin/bash&#10;echo hello"></textarea>
           </label>
         </div>
 
@@ -190,7 +190,9 @@
         <p class="muted">One-time setup: in the Cloudflare Zero Trust dashboard, create a named tunnel,
         add a Public Hostname on your domain (e.g. <code>deploy.yourdomain.com</code> →
         <code>localhost:8080</code>), and copy the tunnel's token. Paste it here once —
-        it is stored in <code>state.json</code> and never shown again.</p>
+        it is stored in <code>state.json</code> and never shown again.<br>
+        cloudflared is not in Debian's repos — install the ARM64 .deb as root:
+        <code>curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64.deb -o /tmp/cf.deb && dpkg -i /tmp/cf.deb</code></p>
         <div class="row">
           <input type="password" id="tunnel-token-input" placeholder="eyJhIjo..." autocomplete="off">
           <button class="btn primary" id="tunnel-token-save">Save token</button>
@@ -238,10 +240,11 @@
       <div class="panel warn-panel">
         <h3>Security notes</h3>
         <ul>
-          <li>This GUI can execute arbitrary code on the phone — that is the deploy/workflow feature by design.</li>
+          <li><strong>This server runs as root</strong> inside the proot-distro Debian container. Every app, workflow and terminal session executes with root privileges — that is the deploy/workflow feature by design, and the access token is the only gate.</li>
           <li>Traffic is plain HTTP on your LAN by default. Prefer using it over the Cloudflare tunnel (HTTPS on your own domain) when away from home.</li>
           <li>Login is rate-limited (5 tries / 60s lockout) and the token is compared in constant time.</li>
           <li>The Cloudflare tunnel token is a secret too — it is stored in <code>state.json</code> (mode 600) and never echoed back in full.</li>
+          <li>proot is not a hard security boundary: paths bound from Termux/Android shared storage are reachable from inside the container.</li>
         </ul>
       </div>
     </section>

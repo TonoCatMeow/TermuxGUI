@@ -2,7 +2,7 @@
   "name": "deploy-gui",
   "version": "1.0.0",
   "private": true,
-  "description": "Termux Deploy-Server GUI — manage apps, workflows, health, Cloudflare tunnels and a browser terminal on Android via Termux",
+  "description": "Deploy-Server GUI for proot-distro Debian on Android (Termux) — manage apps, workflows, health, Cloudflare tunnels and a browser terminal, running as root in the container",
   "main": "dist/server.js",
   "scripts": {
     "build": "tsc",

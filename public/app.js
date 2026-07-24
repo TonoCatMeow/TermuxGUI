@@ -367,7 +367,7 @@ function renderTunnel(t) {
   $('#tunnel-since').textContent = t.running && t.since ? `since ${new Date(t.since).toLocaleTimeString()}` : '';
   $('#tunnel-binary').textContent = t.binaryAvailable
     ? 'found'
-    : 'NOT FOUND — run: pkg install cloudflared';
+    : 'NOT FOUND — install the ARM64 .deb (see README / Tunnels help)';
   $('#tunnel-token-state').textContent = t.tokenSaved ? 'token saved ✓ (hidden)' : 'no token saved';
   $('#tunnel-start').disabled = t.running || !t.tokenSaved || !t.binaryAvailable;
   $('#tunnel-stop').disabled = !t.running;
@@ -480,14 +480,19 @@ function initTerminal() {
 async function loadSettings() {
   try {
     const s = await api('/api/settings');
+    const userLine = s.uid === 0
+      ? '<span class="pill crashed">root</span> — everything runs with full privileges'
+      : esc(s.user);
     $('#env-table').innerHTML = `
+      <tr><td class="muted">Environment</td><td>proot-distro Debian (inside Termux on Android)</td></tr>
+      <tr><td class="muted">Running as</td><td>${userLine}</td></tr>
       <tr><td class="muted">Shell</td><td><code>${esc(s.shell)}</code></td></tr>
-      <tr><td class="muted">$PREFIX</td><td><code>${esc(s.prefix || '–')}</code></td></tr>
+      <tr><td class="muted">Home</td><td><code>${esc(s.home)}</code></td></tr>
       <tr><td class="muted">Data dir</td><td><code>${esc(s.dataDir)}</code></td></tr>
       <tr><td class="muted">State file</td><td><code>${esc(s.stateFile)}</code></td></tr>
       <tr><td class="muted">sshd</td><td>${s.sshd.installed
         ? (s.sshd.running ? '<span class="pill running">running</span>' : '<span class="pill stopped">installed, not running</span>')
-        : '<span class="pill stopped">not installed</span>'}</td></tr>`;
+        : '<span class="pill stopped">not installed (apt install openssh-server)</span>'}</td></tr>`;
   } catch (err) {
     $('#env-table').innerHTML = `<tr><td class="error">${esc(err.message)}</td></tr>`;
   }

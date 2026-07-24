@@ -1,7 +1,7 @@
-# deploy-gui — Termux Deploy-Server GUI
+# deploy-gui — Deploy-Server GUI for proot-distro Debian on Android
 
-A single Node/TypeScript app that runs entirely inside **Termux on Android** and exposes
-**one web GUI** (no CLI) covering:
+A single Node/TypeScript app that runs **inside a proot-distro Debian container in Termux
+on Android**, as **root**, and exposes **one web GUI** (no CLI) covering:
 
 1. **Apps** — deploy code (git clone/pull, zip upload, or paste a file inline) and run it as a
    managed background process with start/stop/restart and live log streaming.
@@ -14,25 +14,55 @@ A single Node/TypeScript app that runs entirely inside **Termux on Android** and
    **own domain** in the Zero Trust dashboard. No random `trycloudflare.com` URLs.
 5. **Terminal** — a real interactive shell in the browser: `node-pty` on the backend,
    xterm.js on the frontend, copy/paste buttons for mobile, PTY resize on window resize.
-6. **Settings** — regenerate the access token, view shell / `$PREFIX` / sshd status.
+6. **Settings** — regenerate the access token, view shell / user / sshd status.
 
 ## Target environment
 
-This runs **inside Termux on Android (aarch64)**, not desktop Linux:
+The stack is: **Android phone → Termux → `proot-distro` Debian → this app (as root)**.
 
-- No `sudo`, no `systemd`. Managed processes are plain `child_process.spawn` children.
-- `$PREFIX` is `/data/data/com.termux/files/usr`, not `/usr`.
-- The shell is resolved from `$SHELL` → `which bash` → `$PREFIX/bin/bash` → `/bin/sh`
-  (`src/shell.ts`) — **`/bin/bash` is never assumed**.
-- `node-pty` is a native module and is **compiled on-device** during `npm install`.
-  Do not `npm install` on a desktop and copy `node_modules` over — the architecture/libc differ.
+What that means for the code:
 
-## Setup (on the phone, in Termux)
+- **Standard Debian/FHS layout inside the container** — `/bin/bash` exists, `/usr` is normal,
+  no Termux `$PREFIX`. The shell is still resolved defensively
+  (`$SHELL` → `which bash` → `/bin/bash` → `/bin/sh`, see `src/shell.ts`).
+- **No systemd, no sudo needed** — proot containers don't boot systemd; managed processes are
+  plain `child_process.spawn` children of the Node server, and everything already runs as root.
+- **aarch64** — `node-pty` is a native module and is **compiled inside the container** during
+  `npm install`. Do not `npm install` on a desktop/other machine and copy `node_modules` over.
+- The container **shares the phone's network** (proot is not a VM with its own NIC), so the GUI
+  is reachable at `http://<phone-wifi-ip>:8080` exactly like a bare-Termux server would be.
+- Paths bound into the container by Termux/proot (e.g. shared Android storage) are reachable
+  from managed apps, workflows, and the terminal — as root.
+
+## Setup (on the phone)
+
+In **Termux** (once):
 
 ```sh
-pkg install nodejs git cloudflared
+pkg install proot-distro
+proot-distro install debian
+proot-distro login debian
+```
+
+Everything below runs **inside the Debian container** (after `proot-distro login debian`),
+as root:
+
+```sh
+apt update
+apt install -y nodejs npm git curl python3 make g++
+# cloudflared is NOT in Debian's repos — install the official ARM64 .deb:
+curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64.deb -o /tmp/cf.deb
+dpkg -i /tmp/cf.deb   # or: apt install -y /tmp/cf.deb
+```
+
+> Debian 12 (bookworm) ships Node 18, which satisfies the Node 18+ requirement.
+> `python3 make g++` are needed to compile node-pty's native module.
+
+Get the code in and start it:
+
+```sh
 git clone <your repo> ~/deploy-gui && cd ~/deploy-gui
-npm install        # this is where node-pty compiles — must happen on the phone
+npm install        # this is where node-pty compiles — must happen inside the container
 npm run build      # tsc -> dist/
 node dist/server.js
 ```
@@ -61,14 +91,17 @@ Optional: `PORT=9000 node dist/server.js` to change the port (default `8080`).
 
 The app never talks to the Cloudflare API and never manages DNS — `cloudflared` reads the
 hostname→port mapping from Cloudflare using the token. The token is stored in
-`~/.deploy-gui/state.json` (mode 600) and never shown again in the UI. A **TUNNEL ACTIVE**
+`/root/.deploy-gui/state.json` (mode 600) and never shown again in the UI. A **TUNNEL ACTIVE**
 badge shows in the nav bar whenever the tunnel is running; stop it when you don't need
 remote access.
 
 ## Security notes (read these)
 
-- **This GUI can execute arbitrary code on the phone** — that is the deploy/workflow/terminal
-  feature by design. The access token is the only gate. Treat it like a server room key.
+- **This server runs as root** and can execute arbitrary code — that is the
+  deploy/workflow/terminal feature by design. The access token is the only gate.
+  Treat it like a server room key.
+- proot is **not a hard security boundary**: paths bound from Termux/Android shared storage
+  are reachable from inside the container, as root.
 - Plain HTTP on the LAN by default — the same tradeoff as similar home-network tools.
   When away from home, use the Cloudflare tunnel (HTTPS on your own domain) instead of
   port-forwarding your router.
@@ -96,7 +129,7 @@ remote access.
 | DELETE | `/api/workflows/:id` | Delete workflow |
 | GET | `/api/tunnel` | Tunnel status (running, token-saved, binary check) |
 | POST | `/api/tunnel/token` `/start` `/stop` | Manage the tunnel |
-| GET | `/api/settings` | Shell / prefix / sshd info |
+| GET | `/api/settings` | Shell / user / sshd info |
 | POST | `/api/settings/regenerate-token` | New token, all sessions invalidated |
 
 Socket.io events: `health:update`, `app:log`, `app:status`, `workflow:log`,
@@ -110,8 +143,8 @@ deploy-gui/
 ├── src/
 │   ├── server.ts             # express + socket.io bootstrap, terminal PTY wiring
 │   ├── auth.ts               # token check, signed session cookies, login rate limit
-│   ├── state.ts              # ~/.deploy-gui/state.json read/write
-│   ├── shell.ts              # Termux-aware $SHELL resolution
+│   ├── state.ts              # /root/.deploy-gui/state.json read/write
+│   ├── shell.ts              # defensive $SHELL resolution (Debian/FHS)
 │   ├── system-stats.ts       # systeminformation wrapper, 2.5s emitter
 │   ├── apps-manager.ts       # spawn/track/kill managed app processes
 │   ├── workflows-manager.ts  # run saved commands, stream output, history
@@ -124,11 +157,11 @@ deploy-gui/
 └── tsconfig.json
 ```
 
-State lives in `~/.deploy-gui/state.json` (override with `DEPLOY_GUI_HOME`).
-Apps deploy into `~/deploy-apps/<name>/` (override with `DEPLOY_APPS_DIR`).
+State lives in `/root/.deploy-gui/state.json` (override with `DEPLOY_GUI_HOME`).
+Apps deploy into `/root/deploy-apps/<name>/` (override with `DEPLOY_APPS_DIR`).
 
 ## Frontend notes
 
 Plain HTML/CSS/vanilla JS served by Express — no framework, no build step, easy to tweak
-right on the phone (e.g. with `nano` or ACode) and reload. xterm.js is vendored under
-`public/vendor/` so the GUI works with no internet access at all.
+right on the phone (e.g. with `nano` in the container, or ACode in Android) and reload.
+xterm.js is vendored under `public/vendor/` so the GUI works with no internet access at all.
